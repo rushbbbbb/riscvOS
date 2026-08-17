@@ -1,0 +1,359 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FreqGeo-SAM3: Frequency-Aware Adaptation of SAM 3 for Urban-Scene Semantic Segmentation</title>
+    <style>
+        body {
+            font-family: "Times New Roman", Times, Georgia, serif;
+            line-height: 1.6;
+            color: #111;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 0 20px;
+            background-color: #fcfcfc;
+        }
+        
+        /* Article Header */
+        header {
+            text-align: center;
+            margin-bottom: 40px;
+            border-bottom: 2px solid #333;
+            padding-bottom: 25px;
+        }
+        
+        h1 {
+            font-size: 2em;
+            margin-bottom: 15px;
+            line-height: 1.3;
+            font-weight: bold;
+        }
+        
+        .authors {
+            font-size: 1.1em;
+            font-weight: bold;
+            margin-bottom: 8px;
+        }
+        
+        .address {
+            font-style: italic;
+            color: #444;
+            font-size: 0.95em;
+        }
+        
+        /* Section Styles */
+        h2 {
+            font-size: 1.35em;
+            text-transform: uppercase;
+            border-bottom: 1px solid #ccc;
+            padding-bottom: 4px;
+            margin-top: 35px;
+            margin-bottom: 15px;
+            letter-spacing: 0.5px;
+        }
+        
+        h3 {
+            font-size: 1.1em;
+            margin-top: 25px;
+            margin-bottom: 10px;
+        }
+        
+        /* Abstract & Keywords */
+        .abstract-container {
+            background-color: #f4f4f4;
+            padding: 20px 25px;
+            border-left: 4px solid #333;
+            margin-bottom: 30px;
+            border-radius: 2px;
+        }
+        
+        .abstract-title, .keywords-title {
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 0.9em;
+            letter-spacing: 1px;
+        }
+        
+        .keywords {
+            margin-top: 15px;
+            font-size: 0.95em;
+        }
+        
+        /* Math & Formulas */
+        .equation {
+            background-color: #f9f9f9;
+            padding: 12px;
+            margin: 18px 0;
+            overflow-x: auto;
+            text-align: center;
+            font-family: "Cambria Math", "Latin Modern Math", "Times New Roman", serif;
+            font-style: italic;
+            border: 1px dashed #ddd;
+        }
+        
+        .math-inline {
+            font-family: "Cambria Math", "Latin Modern Math", "Times New Roman", serif;
+            font-style: italic;
+        }
+        
+        /* Lists */
+        ul {
+            padding-left: 25px;
+            margin-bottom: 20px;
+        }
+        
+        li {
+            margin-bottom: 8px;
+        }
+        
+        /* Tables */
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            font-size: 0.95em;
+        }
+        
+        caption {
+            font-weight: bold;
+            margin-bottom: 10px;
+            text-align: left;
+        }
+        
+        th, td {
+            border: 1px solid #ddd;
+            padding: 10px 12px;
+            text-align: center;
+        }
+        
+        th {
+            background-color: #f2f2f2;
+            font-weight: bold;
+        }
+        
+        tr:nth-child(even) {
+            background-color: #f9f9f9;
+        }
+        
+        .table-note {
+            font-size: 0.85em;
+            color: #555;
+            margin-top: -15px;
+            margin-bottom: 25px;
+            line-height: 1.4;
+        }
+        
+        /* Highlight bolded leads in list */
+        .list-lead {
+            font-weight: bold;
+            font-style: normal;
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>FreqGeo-SAM3: Frequency-Aware Adaptation of SAM 3 for Urban-Scene Semantic Segmentation</h1>
+        <div class="authors">Junbo LUO, Hong LIN</div>
+        <div class="address">
+            Faculty of Applied Sciences, Macao Polytechnic University, Macao, China
+        </div>
+    </header>
+
+    <div class="abstract-container">
+        <span class="abstract-title">Abstract—</span>
+        Promptable segmentation foundation models do not directly provide fixed-category urban-scene predictions. We present FreqGeo-SAM3, a parameter-efficient framework that freezes the SAM 3 image encoder and reuses its global and multiscale features. A frequency-aware pixel decoder applies Spectral Gates for spatial response selection and adaptive Fourier-amplitude modulation. Its local output is fused with global context for 19-class prediction. Training uses a Unified Semantic-Geometric Objective combining Focal, Dice, and Lovász-Softmax losses with semantic discriminative regularization. Under a matched frozen-encoder protocol, FreqGeo-SAM3 reaches 77.47% mIoU on the Cityscapes validation set, improving over Frozen SAM3 and Frozen SAM3-FPN by 11.40 and 2.55 points, respectively, with 7.350M trainable parameters (0.902% of the training-time model). These results support the design in this setting.
+        
+        <div class="keywords">
+            <span class="keywords-title">Keywords—</span> urban scene understanding, semantic segmentation, SAM 3, frequency-aware decoding, unified semantic-geometric objective, discriminative learning
+        </div>
+    </div>
+
+    <section>
+        <h2>1. Introduction</h2>
+        <p>Urban-scene semantic segmentation supports autonomous driving and intelligent transportation by assigning one of a fixed set of labels to every pixel. Fully convolutional networks established end-to-end dense prediction, while DeepLabv3+ combined multiscale context with decoder-based boundary refinement. Cityscapes provides a standard 19-class benchmark, but its scenes combine large background regions with small or thin safety-relevant objects, occlusion, class imbalance, and complex boundaries. Accurate urban perception therefore requires global scene context without losing fine spatial detail.</p>
+
+        <p>The Segment Anything Model (SAM) provides transferable promptable segmentation representations, and SAM 3 extends this paradigm to promptable concept segmentation with text and exemplar prompts. These prompt-conditioned, class-agnostic outputs do not directly provide the complete 19-class maps required by Cityscapes. SAM-Adapter demonstrates lightweight downstream adaptation, while AD-SAM targets autonomous-driving segmentation. These studies motivate task-specific SAM adaptation. In a frozen-encoder setting, however, relying only on the final low-resolution global representation can limit the recovery of small objects and boundaries. This creates a need to recover local structure from the encoder's frozen multiscale features while preserving its global context.</p>
+
+        <p>We therefore propose FreqGeo-SAM3, which keeps the SAM 3 image encoder frozen and reuses both its global representation and multiscale backbone features. An FPN-style top-down pixel decoder aggregates the multiscale features. FcaNet shows that frequency components can enrich channel representations. At each scale, our Spectral Gate combines spatial response selection with adaptive two-dimensional Fourier-amplitude modulation. The decoded local representation is then fused with the resized global representation and mapped to the 19 Cityscapes classes by a lightweight segmentation head.</p>
+
+        <p>Training uses a Unified Semantic-Geometric Objective (USGO) to coordinate output-space segmentation and feature-space regularization. Focal, Dice, and Lovász-Softmax losses target hard-pixel classification, region overlap, and IoU-oriented optimization, respectively, while a discriminative term encourages compact within-class embeddings and separated class centers.</p>
+
+        <p>The main contributions are:</p>
+        <ul>
+            <li><span class="list-lead">Efficient frequency-aware adaptation.</span> FreqGeo-SAM3 converts frozen SAM 3 global and multiscale features into 19-class predictions through a top-down decoder with Spectral Gates, using 7.350M trainable parameters (0.902% of the training-time model).</li>
+            <li><span class="list-lead">Unified supervision.</span> USGO combines output-space segmentation losses with discriminative feature regularization.</li>
+            <li><span class="list-lead">Controlled evaluation.</span> On Cityscapes validation, FreqGeo-SAM3 reaches 77.47% mIoU, outperforming Frozen SAM3 and Frozen SAM3-FPN by 11.40 and 2.55 points. Component-removal ablations evaluate the complete Spectral Gate and USGO within this frozen-SAM 3 protocol.</li>
+        </ul>
+    </section>
+
+    <section>
+        <h2>2. Methodology</h2>
+
+        <h3>2.1 Overall Framework</h3>
+        <p>Given an input image <span class="math-inline">I &isin; &mathbb;R<sup>3 &times; H &times; W</sup></span>, FreqGeo-SAM3 reuses the global representation <span class="math-inline">G</span> and multiscale features <span class="math-inline">{F<sub>l</sub>}<sub>l=1</sub><sup>L</sup></span> extracted by the pretrained SAM 3 image encoder. The multiscale features are aggregated by a frequency-aware pixel decoder (FAPD) to produce a high-resolution local representation <span class="math-inline">D</span>. Instead of downsampling <span class="math-inline">D</span>, we resize <span class="math-inline">G</span> to the spatial resolution of <span class="math-inline">D</span> and fuse the two representations for semantic prediction:</p>
+
+        <div class="equation">
+            (G, {F<sub>l</sub>}<sub>l=1</sub><sup>L</sup>) = E<sub>&theta;<sub>0</sub></sub>(I), &nbsp;&nbsp;&nbsp;&nbsp; 
+            D = FAPD({F<sub>l</sub>}<sub>l=1</sub><sup>L</sup>), <br>
+            Z = D || &uarr;<sub>D</sub> G, &nbsp;&nbsp;&nbsp;&nbsp; 
+            A = &uarr;<sub>I</sub> H<sub>seg</sub>(Z), &nbsp;&nbsp;&nbsp;&nbsp; 
+            p<sub>i</sub> = softmax(A<sub>i</sub>)
+        </div>
+
+        <p>Here, <span class="math-inline">&uarr;<sub>D</sub> G</span> denotes resizing <span class="math-inline">G</span> to the spatial resolution of <span class="math-inline">D</span>, <span class="math-inline">||</span> denotes channel-wise concatenation, <span class="math-inline">A</span> contains the class logits resized by <span class="math-inline">&uarr;<sub>I</sub></span> to the input resolution, and <span class="math-inline">p<sub>i</sub></span> is the class-probability vector of pixel <span class="math-inline">i</span>. The pretrained encoder parameters <span class="math-inline">&theta;<sub>0</sub></span> remain frozen during training, i.e., <span class="math-inline">&nabla;<sub>&theta;<sub>0</sub></sub> &mathcal;L<sub>USGO</sub> = 0</span>. Its forward pass is executed without gradient tracking, while the frequency-aware pixel decoder, semantic head, and training-only embedding head remain trainable. The resulting probabilities produce the complete <span class="math-inline">C = 19</span> semantic label map.</p>
+
+        <h3>2.2 Frequency-Aware Pixel Decoder</h3>
+        <p>We index the backbone features from the highest spatial resolution <span class="math-inline">F<sub>1</sub></span> to the lowest <span class="math-inline">F<sub>L</sub></span>. The decoder projects every feature into a common <span class="math-inline">d = 256</span> dimensional space. Starting from <span class="math-inline">F<sub>L</sub></span>, high-level semantic context is progressively transferred to higher-resolution levels through top-down fusion:</p>
+
+        <div class="equation">
+            Q<sub>l</sub> = Conv<sub>1&times;1</sub>(F<sub>l</sub>), &nbsp;&nbsp; l = 1, &hellip;, L <br>
+            X<sub>L</sub> = &phi;<sub>L</sub>(Q<sub>L</sub>) <br>
+            X<sub>l</sub> = &phi;<sub>l</sub>(Q<sub>l</sub> + &mathcal;U<sub>l</sub>(X<sub>l+1</sub>)), &nbsp;&nbsp; l = L-1, &hellip;, 1 <br>
+            D = X<sub>1</sub>
+        </div>
+
+        <p>where <span class="math-inline">&mathcal;U<sub>l</sub></span> denotes resizing to the spatial resolution of <span class="math-inline">Q<sub>l</sub></span>. Each refinement block <span class="math-inline">&phi;<sub>l</sub></span> contains a Spectral Gate followed by a 3&times;3 convolution, Group Normalization, and a GELU activation. The lateral connections preserve scale-specific spatial information, whereas the top-down pathway propagates high-level contextual information.</p>
+
+        <p>For an input feature <span class="math-inline">X &isin; &mathbb;R<sup>B &times; d &times; h &times; w</sup></span>, the Spectral Gate consists of complementary spatial and frequency branches. The spatial branch produces position- and channel-dependent responses, while the frequency branch adaptively modulates different frequency bands. Let <span class="math-inline">&mathcal;F</span> and <span class="math-inline">&mathcal;F<sup>-1</sup></span> denote the two-dimensional real Fourier transform and its inverse, respectively. Using <span class="math-inline">K</span> smooth radial basis functions <span class="math-inline">{B<sub>k</sub>}<sub>k=1</sub><sup>K</sup></span> that cover the frequency plane from low to high frequencies, the Spectral Gate is formulated as:</p>
+
+        <div class="equation">
+            X&#770; = &mathcal;F}(X), &nbsp;&nbsp;&nbsp;&nbsp; X<sub>s</sub> = X &odot; 2&sigma;(g<sub>s</sub>(X)) <br>
+            a<sub>b,c,k</sub> = &lang; B<sub>k</sub>, log(1 + |X&#770;<sub>b,c</sub>|) &rang; / (||B<sub>k</sub>||<sub>1</sub> + &epsilon;) <br>
+            &boldsymbol;&beta;<sub>b,c</sub> = tanh(g<sub>f</sub>(<b>a</b><sub>b,c</sub>)) <br>
+            M<sub>b,c</sub> = exp( &eta; &sum;<sub>k=1</sub><sup>K</sup> &beta;<sub>b,c,k</sub> B<sub>k</sub> ) <br>
+            X<sub>f</sub> = &mathcal;F<sup>-1</sup>(M &odot; X&#770;) <br>
+            SG(X) = X + &rho;<sub>s</sub>(X<sub>s</sub> - X) + &rho;<sub>f</sub>(X<sub>f</sub> - X)
+        </div>
+
+        <p>Here, <span class="math-inline">a<sub>b,c,k</sub></span> summarizes the spectral response of channel <span class="math-inline">c</span> in frequency band <span class="math-inline">k</span>, and <span class="math-inline">&boldsymbol;&beta;<sub>b,c</sub></span> contains the corresponding adaptive band coefficients. The parameter <span class="math-inline">&eta;</span> controls the spectral modulation strength, whereas <span class="math-inline">&rho;<sub>s</sub></span> and <span class="math-inline">&rho;<sub>f</sub></span> balance the spatial and frequency branches. Since <span class="math-inline">M</span> is real and strictly positive, it modifies the spectral magnitude while preserving the original phase. Moreover, <span class="math-inline">M<sub>b,c</sub></span> varies across both channels and frequency locations, enabling band-selective modulation rather than uniform channel-wise spectral scaling.</p>
+
+        <h3>2.3 Unified Semantic-Geometric Objective</h3>
+        <p>The Unified Semantic-Geometric Objective (USGO) combines output-space semantic supervision with representation-space discriminative regularization:</p>
+
+        <div class="equation">
+            &mathcal;L<sub>USGO</sub> = &mathcal;L<sub>out</sub> + &lambda;<sub>disc</sub> &mathcal;L<sub>disc</sub> <br>
+            &mathcal;L<sub>out</sub> = &lambda;<sub>foc</sub> &mathcal;L<sub>focal</sub> + &lambda;<sub>dice</sub> &mathcal;L<sub>dice</sub> + &lambda;<sub>lov</sub> &mathcal;L<sub>lovasz</sub> <br>
+            &mathcal;L<sub>disc</sub> = &mathcal;L<sub>var</sub> + &lambda;<sub>dist</sub> &mathcal;L<sub>dist</sub>
+        </div>
+
+        <p>Focal loss emphasizes difficult predictions, Dice loss promotes region-level mask consistency, and Lov&aacute;sz-Softmax loss provides IoU-oriented optimization. Cityscapes ignore labels are excluded from all output-space terms, and the Dice loss is averaged only over the class set <span class="math-inline">&mathcal;C<sub>B</sub></span> present in the current mini-batch.</p>
+
+        <p>Adapting the variance–distance discriminative formulation from instances to semantic classes, we regularize the organization of the fused representation <span class="math-inline">Z</span>. A training-only projection head generates a 16-dimensional unit-normalized embedding for each valid pixel. Ground-truth labels are mapped to the embedding resolution using nearest-neighbor interpolation. Let <span class="math-inline">S<sub>c</sub></span> denote the set of valid embedding pixels belonging to class <span class="math-inline">c</span>, <span class="math-inline">N<sub>c</sub> = |S<sub>c</sub>|</span>, and <span class="math-inline">[x]<sub>+</sub> = max(x, 0)</span>. The embedding and representation-space losses are defined as:</p>
+
+        <div class="equation">
+            h<sub>i</sub> = H<sub>emb</sub>(Z)<sub>i</sub>, &nbsp;&nbsp;&nbsp;&nbsp; e<sub>i</sub> = h<sub>i</sub> / (||h<sub>i</sub>||<sub>2</sub> + &epsilon;) <br>
+            &mu;<sub>c</sub> = (1 / N<sub>c</sub>) &sum;<sub>i &isin; S<sub>c</sub></sub> e<sub>i</sub>, &nbsp;&nbsp;&nbsp;&nbsp; &mu;&#772;<sub>c</sub> = &mu;<sub>c</sub> / (||&mu;<sub>c</sub>||<sub>2</sub> + &epsilon;) <br>
+            &mathcal;L<sub>var</sub> = (1 / |&mathcal;C<sub>B</sub>|) &sum;<sub>c &isin; &mathcal;C<sub>B</sub></sub> (1 / N<sub>c</sub>) &sum;<sub>i &isin; S<sub>c</sub></sub> [ ||e<sub>i</sub> - &mu;&#772;<sub>c</sub>||<sub>2</sub> - m<sub>v</sub> ]<sub>+</sub><sup>2</sup> <br>
+            &mathcal;L<sub>dist</sub> = (1 / |&mathcal;P<sub>B</sub>|) &sum;<sub>(c,c') &isin; &mathcal;P<sub>B</sub></sub> [ m<sub>d</sub> - ||&mu;&#772;<sub>c</sub> - &mu;&#772;<sub>c'</sub>||<sub>2</sub> ]<sub>+</sub><sup>2</sup>
+        </div>
+
+        <p>Here, <span class="math-inline">&mathcal;P<sub>B</sub></span> denotes the set of distinct class pairs in the current mini-batch. Since the class centers are unit-normalized, the distance margin satisfies <span class="math-inline">0 < m<sub>d</sub> < 2</span>. The variance term promotes intra-class compactness, whereas the distance term separates different semantic centers. The output-space terms supervise semantic prediction, while the discriminative terms regularize the class organization of the shared representation. All components are optimized jointly during training, and the embedding head is discarded during inference.</p>
+    </section>
+
+    <section>
+        <h2>3. Experiments</h2>
+
+        <h3>3.1 Experimental Setup</h3>
+        <p><strong>Dataset and preprocessing.</strong> We evaluate FreqGeo-SAM3 on the Cityscapes fine-annotation split, containing 2,975 training images and 500 validation images at an original resolution of 1024&times;2048. The annotations are mapped to the 19 official trainIds, while void categories are assigned the ignore label 255. During training, we apply random 1008&times;1008 cropping and horizontal flipping. During validation, the image aspect ratio is preserved and predictions are obtained using 1008&times;1008 sliding windows with a stride of 672. Logits in overlapping regions are averaged and subsequently resized to the original image resolution before evaluation. Images are normalized using the statistics associated with the released SAM 3 checkpoint, namely mean (0.5, 0.5, 0.5) and standard deviation (0.5, 0.5, 0.5).</p>
+
+        <p><strong>Implementation details.</strong> All SAM 3 encoder parameters remain frozen. The frequency-aware decoder, semantic head, and training-only embedding head are optimized using AdamW with an initial learning rate of 10<sup>-4</sup> and weight decay 0.01. A cosine schedule decreases the learning rate to 10<sup>-6</sup> over 100 epochs. We use a total training batch size of 4, automatic mixed precision, and an NVIDIA RTX A6000 GPU. The Spectral Gate uses <span class="math-inline">K = 4</span> radial frequency bands and modulation strength <span class="math-inline">&eta; = 0.5</span>. The embedding dimension is 16, with margins <span class="math-inline">m<sub>v</sub> = 0.5</span> and <span class="math-inline">m<sub>d</sub> = 0.75</span>. The USGO weights are set to <span class="math-inline">&lambda;<sub>foc</sub> = 0.4</span>, <span class="math-inline">&lambda;<sub>dice</sub> = 0.3</span>, <span class="math-inline">&lambda;<sub>lov</sub> = 0.2</span>, <span class="math-inline">&lambda;<sub>disc</sub> = 0.1</span>, and <span class="math-inline">&lambda;<sub>dist</sub> = 1.0</span>. The main models are evaluated over three random seeds, namely 42, 3407, and 2026, and report mean mIoU. Unless otherwise specified, ablations use seed 42.</p>
+
+        <p><strong>Evaluation.</strong> We accumulate a confusion matrix over all valid pixels in the validation set and report the mean class IoU over the 19 evaluation categories. Pixels assigned the ignore label do not contribute to the metric. For every same-protocol run, we select the checkpoint with the highest Cityscapes validation mIoU and report its score.</p>
+
+        <h3>3.2 Comparison with Baselines</h3>
+        <p>Table 1 compares FreqGeo-SAM3 with frozen-encoder baselines under the same training and evaluation protocol. Frozen SAM3 predicts from only the final global feature, while Frozen SAM3-FPN uses the same multiscale top-down decoder as our method but excludes the proposed Spectral Gate and USGO. We additionally include the result reported by AD-SAM as literature context.</p>
+
+        <table>
+            <caption>Table 1: Cityscapes validation results. Same-protocol values are means over three runs.</caption>
+            <thead>
+                <tr>
+                    <th>Method</th>
+                    <th>Protocol</th>
+                    <th>Trainable Params</th>
+                    <th>Total Params</th>
+                    <th>mIoU (%)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>Frozen SAM3</td>
+                    <td>Same</td>
+                    <td>0.595M</td>
+                    <td>808.360M</td>
+                    <td>66.07</td>
+                </tr>
+                <tr>
+                    <td>Frozen SAM3-FPN</td>
+                    <td>Same</td>
+                    <td>5.671M</td>
+                    <td>813.436M</td>
+                    <td>74.92</td>
+                </tr>
+                <tr>
+                    <td><strong>FreqGeo-SAM3</strong></td>
+                    <td>Same</td>
+                    <td><strong>7.350M</strong></td>
+                    <td><strong>815.114M</strong></td>
+                    <td><strong>77.47</strong></td>
+                </tr>
+                <tr>
+                    <td>AD-SAM</td>
+                    <td>Reported</td>
+                    <td>--</td>
+                    <td>--</td>
+                    <td>68.14</td>
+                </tr>
+            </tbody>
+        </table>
+        <div class="table-note">
+            * The parameter count of FreqGeo-SAM3 includes the training-only embedding head, which is removed during inference. AD-SAM uses a different backbone, architecture, preprocessing pipeline, and optimization protocol; its result is therefore not directly comparable.
+        </div>
+
+        <p>Under the matched protocol, FreqGeo-SAM3 improves over Frozen SAM3 by <strong>11.40</strong> mIoU points and over Frozen SAM3-FPN by <strong>2.55</strong> points. The Frozen SAM3-FPN variant improves over Frozen SAM3 by 8.85 points, and the complete FreqGeo-SAM3 framework provides a further gain over that baseline. Because Frozen SAM3-FPN excludes both the Spectral Gate and USGO, this comparison measures their combined benefit relative to the defined FPN baseline. The effect of removing each complete component is reported below. Despite its improved accuracy, FreqGeo-SAM3 optimizes only 7.350 million parameters, corresponding to approximately 0.902% of its total training-time parameters.</p>
+
+        <h3>3.3 Ablation Study</h3>
+        <p>We conduct one-component-at-a-time ablations to evaluate the contributions of the Spectral Gate and USGO. All variants use the same frozen SAM 3 encoder, multiscale pixel decoder, semantic head, data preprocessing, and optimization settings. In the <em>w/o Spectral Gate</em> variant, each Spectral Gate is replaced with an identity mapping while the remaining decoder structure is preserved. In the <em>w/o USGO</em> variant, the complete objective is replaced with standard cross-entropy loss.</p>
+
+        <table>
+            <caption>Table 2: Single-seed ablation results on the Cityscapes validation set (seed 42); the full-model value is from the same run.</caption>
+            <thead>
+                <tr>
+                    <th>Configuration</th>
+                    <th>mIoU (%)</th>
+                    <th>&Delta; mIoU (pp)</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>w/o Spectral Gate</td>
+                    <td>75.63</td>
+                    <td>-1.84</td>
+                </tr>
+                <tr>
+                    <td>w/o USGO</td>
+                    <td>75.49</td>
+                    <td>-1.98</td>
+                </tr>
+                <tr>
+                    <td><strong>FreqGeo-SAM3</strong></td>
+                    <td><strong>77.47</strong></td>
+                    <td>--</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <p>Removing the complete Spectral Gate decreases mIoU from 77.47% to 75.63%, a reduction of 1.84 percentage points. This result supports the aggregate contribution of the gate to multiscale feature decoding; it does not isolate the spatial and frequency branches. Replacing the complete USGO with cross-entropy reduces mIoU by 1.98 points, supporting USGO as a package relative to conventional pixel-wise classification. Overall, removing either complete component lowers the reported mIoU.</p>
+
+        <h3>3.4 Qualitative Analysis</h3>
+        <p>Qualitative evaluation demonstrates that Frozen SAM3 produces fragmented predictions for vehicle and noisy sidewalk regions, whereas FreqGeo-SAM3 yields more coherent object regions and cleaner road–sidewalk boundaries across representative validation images (including thin poles, traffic signs, pedestrians under occlusion, vehicle contours, and road–sidewalk boundaries).</p>
+    </section>
+
+    <section>
+        <h2>4. Conclusion</h2>
+        <p>This paper presented FreqGeo-SAM3, a parameter-efficient framework for adapting frozen SAM 3 representations to fixed-category urban semantic segmentation. Its frequency-aware pixel decoder combines multiscale top-down aggregation, spatial response selection, and band-selective spectral modulation, while USGO coordinates output-space segmentation with feature-space discriminative regularization. On the Cityscapes validation set, FreqGeo-SAM3 achieves 77.47% mIoU, outperforming the same-protocol Frozen SAM3 baseline by 11.40 mIoU points while optimizing 7.350 million parameters (0.902% of the training-time model). The component-removal results report lower mIoU without either the complete Spectral Gate or USGO. The evaluation is limited to one frozen SAM 3 setting and the Cityscapes validation set; within this scope, the results support frequency-aware multiscale adaptation for urban semantic segmentation.</p>
+    </section>
+
+</body>
+</html>
